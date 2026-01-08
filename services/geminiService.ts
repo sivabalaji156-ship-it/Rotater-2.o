@@ -2,6 +2,11 @@
 import { GoogleGenAI, Type, Chat, Modality } from "@google/genai";
 import { ClimateStats, Prediction, NewsResult, MapResult, GroundingSource, BoundingBox, Calamity } from "../types";
 
+/**
+ * World-class senior engineer note: 
+ * We initialize the AI client using process.env.API_KEY. 
+ * This instance is used to perform high-level climate intelligence tasks.
+ */
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface ResolvedLocation {
@@ -11,17 +16,13 @@ export interface ResolvedLocation {
   resolvedName: string;
 }
 
-// Helper to clean Markdown JSON blocks often returned by LLMs
 const cleanJSON = (text: string) => {
   if (!text) return "{}";
-  // Attempt to extract JSON object structure directly
   const firstBrace = text.indexOf('{');
   const lastBrace = text.lastIndexOf('}');
-  
   if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
       return text.substring(firstBrace, lastBrace + 1);
   }
-  
   return text.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
 };
 
@@ -37,9 +38,9 @@ export const resolveGeospatialQuery = async (query: string): Promise<ResolvedLoc
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            lat: { type: Type.NUMBER, description: "Center latitude" },
-            lon: { type: Type.NUMBER, description: "Center longitude" },
-            resolvedName: { type: Type.STRING, description: "Official name of the place" },
+            lat: { type: Type.NUMBER },
+            lon: { type: Type.NUMBER },
+            resolvedName: { type: Type.STRING },
             bbox: {
               type: Type.OBJECT,
               properties: {
@@ -56,8 +57,7 @@ export const resolveGeospatialQuery = async (query: string): Promise<ResolvedLoc
       }
     });
 
-    const cleanText = cleanJSON(response.text || "{}");
-    return JSON.parse(cleanText);
+    return JSON.parse(cleanJSON(response.text));
   } catch (error) {
     console.error("Geospatial Resolution Error:", error);
     throw new Error("Failed to resolve location coordinates.");
@@ -97,7 +97,7 @@ export const getClimateInsights = async (
                 type: Type.OBJECT,
                 properties: {
                   month: { type: Type.STRING },
-                  riskLevel: { type: Type.STRING, enum: ['Low', 'Medium', 'High', 'Critical'] },
+                  riskLevel: { type: Type.STRING },
                   predictedTemp: { type: Type.NUMBER },
                   description: { type: Type.STRING }
                 }
@@ -108,8 +108,7 @@ export const getClimateInsights = async (
       }
     });
 
-    const cleanText = cleanJSON(response.text || "{}");
-    return JSON.parse(cleanText);
+    return JSON.parse(cleanJSON(response.text));
   } catch (error) {
     console.error("Gemini AI Error:", error);
     return {
@@ -162,34 +161,6 @@ export const generateSpeech = async (text: string): Promise<string | undefined> 
   } catch (error) {
     console.error("TTS Error:", error);
     return undefined;
-  }
-};
-
-export const getNearbyResources = async (lat: number, lon: number): Promise<MapResult> => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: "List nearby emergency shelters, hospitals, and disaster relief centers.",
-      config: {
-        tools: [{ googleMaps: {} }],
-        toolConfig: {
-          retrievalConfig: { latLng: { latitude: lat, longitude: lon } }
-        }
-      }
-    });
-
-    const points: GroundingSource[] = [];
-    response.candidates?.[0]?.groundingMetadata?.groundingChunks?.forEach((chunk: any) => {
-      if (chunk.maps) {
-        points.push({ title: chunk.maps.title, uri: chunk.maps.uri });
-      } else if (chunk.web) {
-        points.push({ title: chunk.web.title, uri: chunk.web.uri });
-      }
-    });
-
-    return { answer: response.text || "No resources found.", points };
-  } catch (e) {
-    return { answer: "Could not fetch resources.", points: [] };
   }
 };
 
